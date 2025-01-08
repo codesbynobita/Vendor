@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ইনভয়েস জেনারেটর</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            color: #333;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .form-container {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            margin: 0 auto;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .invoice {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            margin: 20px auto;
+        }
+        .invoice h2 {
+            text-align: center;
+            font-size: 1.5em;
+        }
+        .invoice-table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        .invoice-table th, .invoice-table td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        .qr-code {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .download-btn {
+            background-color: #e67e22;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .download-btn:hover {
+            background-color: #d35400;
+        }
+    </style>
+</head>
+<body>
+
+<h1>ইনভয়েস জেনারেটর</h1>
+
+<div class="form-container">
+    <label for="customerName">গ্রাহকের নাম:</label>
+    <input type="text" id="customerName" placeholder="গ্রাহকের নাম" required>
+
+    <label for="signatureText">স্বাক্ষর:</label>
+    <textarea id="signatureText" placeholder="স্বাক্ষরের জন্য এখানে লিখুন..." rows="4" required></textarea>
+
+    <div id="itemList">
+        <div class="item">
+            <label for="itemName">পণ্য নাম:</label>
+            <input type="text" class="itemName" placeholder="পণ্য নাম" required>
+
+            <label for="quantity">পরিমাণ:</label>
+            <input type="number" class="quantity" placeholder="পরিমাণ" required>
+
+            <label for="price">মূল্য (BDT):</label>
+            <input type="number" class="price" placeholder="মূল্য" required>
+
+            <button type="button" class="remove-item" onclick="removeItem(this)">মুছে ফেলুন</button>
+        </div>
+    </div>
+
+    <button type="button" onclick="addItem()">আরও পণ্য যোগ করুন</button>
+    <button type="button" onclick="generateInvoice()">ইনভয়েস তৈরি করুন</button>
+</div>
+
+<div class="invoice" id="invoice">
+    <h2>ইনভয়েস</h2>
+    <p id="invoiceCustomerName"></p>
+    <table class="invoice-table" id="invoiceTable"></table>
+    <p id="totalAmount"></p>
+    <p id="invoiceSignature"></p>
+
+    <div class="qr-code" id="qrcode"></div>
+
+    <button class="download-btn" id="downloadBtn" onclick="downloadPDF()">ইনভয়েস ডাউনলোড করুন</button>
+    <button class="download-btn" id="emailBtn" onclick="sendEmail()">ইমেইল প্রেরণ করুন</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+    let itemCount = 1;
+
+    function addItem() {
+        itemCount++;
+        const itemList = document.getElementById('itemList');
+        const newItem = document.createElement('div');
+        newItem.classList.add('item');
+        newItem.innerHTML = `
+            <label for="itemName">পণ্য নাম:</label>
+            <input type="text" class="itemName" placeholder="পণ্য নাম" required>
+
+            <label for="quantity">পরিমাণ:</label>
+            <input type="number" class="quantity" placeholder="পরিমাণ" required>
+
+            <label for="price">মূল্য (BDT):</label>
+            <input type="number" class="price" placeholder="মূল্য" required>
+
+            <button type="button" class="remove-item" onclick="removeItem(this)">মুছে ফেলুন</button>
+        `;
+        itemList.appendChild(newItem);
+    }
+
+    function removeItem(button) {
+        button.parentElement.remove();
+        itemCount--;
+    }
+
+    function generateInvoice() {
+        const customerName = document.getElementById('customerName').value;
+        const signatureText = document.getElementById('signatureText').value;
+
+        if (!customerName || !signatureText) {
+            alert("গ্রাহকের নাম এবং স্বাক্ষর প্রদান করুন");
+            return;
+        }
+
+        const items = [];
+        const itemNames = document.querySelectorAll('.itemName');
+        const quantities = document.querySelectorAll('.quantity');
+        const prices = document.querySelectorAll('.price');
+
+        let totalAmount = 0;
+
+        for (let i = 0; i < itemCount; i++) {
+            const itemName = itemNames[i].value;
+            const quantity = parseFloat(quantities[i].value);
+            const price = parseFloat(prices[i].value);
+
+            if (!itemName || isNaN(quantity) || isNaN(price)) {
+                alert("সব পণ্য পূর্ণ তথ্য দিন");
+                return;
+            }
+
+            const total = quantity * price;
+            totalAmount += total;
+
+            items.push({ itemName, quantity, price, total });
+        }
+
+        const currentDate = new Date().toLocaleDateString('bn-BD');
+        const currentTime = new Date().toLocaleTimeString('bn-BD');
+
+        const invoiceHTML = `
+            <h2>ইনভয়েস</h2>
+            <p>গ্রাহকের নাম: <strong>${customerName}</strong></p>
+            <p>তারিখ: ${currentDate} ${currentTime}</p>
+            <table class="invoice-table">
+                <tr>
+                    <th>পণ্য</th>
+                    <th>পরিমাণ</th>
+                    <th>মূল্য (BDT)</th>
+                    <th>মোট (BDT)</th>
+                </tr>
+                ${items.map(item => `
+                    <tr>
+                        <td>${item.itemName}</td>
+                        <td>${item.quantity}</td>
+                        <td>${item.price.toFixed(2)}</td>
+                        <td>${item.total.toFixed(2)}</td>
+                    </tr>
+                `).join('')}
+                <tr>
+                    <td colspan="3" style="text-align: right; font-weight: bold;">মোট:</td>
+                    <td>${totalAmount.toFixed(2)}</td>
+                </tr>
+            </table>
+            <p>${signatureText}</p>
+        `;
+
+        document.getElementById('invoice').style.display = 'block';
+        document.getElementById('invoiceCustomerName').innerHTML = গ্রাহকের নাম: ${customerName};
+        document.getElementById('invoiceTable').innerHTML = invoiceHTML;
+        document.getElementById('totalAmount').innerHTML = মোট: ${totalAmount.toFixed(2)} BDT;
+        document.getElementById('invoiceSignature').innerHTML = স্বাক্ষর: ${signatureText};
+
+        // Generate QR code
+        const invoiceData = JSON.stringify({ customerName, items, totalAmount, date: currentDate, time: currentTime });
+        new QRCode(document.getElementById("qrcode"), {
+            text: invoiceData,
+            width: 128,
+            height: 128,
+        });
+    }
+
+    function downloadPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const invoiceContent = document.getElementById('invoice').innerHTML;
+
+        doc.html(invoiceContent, {
+            callback: function (doc) {
+                doc.save('invoice.pdf');
+            },
+            x: 10,
+            y: 10
+        });
+    }
+
+    function sendEmail() {
+        const emailBody = document.getElementById('invoice').innerHTML;
+        const emailSubject = 'Invoice';
+        const mailtoLink = mailto:nahidpias3@gmail.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)};
+        window.location.href = mailtoLink;
+    }
+</script>
+
+</body>
+</html>
